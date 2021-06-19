@@ -4,6 +4,7 @@ import {
   FuzzyMatch,
   FuzzySuggestModal,
   MarkdownView,
+  htmlToMarkdown,
 } from "obsidian";
 
 // @ts-ignore
@@ -12,25 +13,6 @@ import TurndownService from "turndown";
 
 export default class Pluck extends Plugin {
   async onload() {
-    // Intercept Cross-Origin.
-    // H/t https://discord.com/channels/686053708261228577/707816848615407697/802052942885945395
-    // @ts-ignore
-    electron.remote.session.defaultSession.webRequest.onHeadersReceived(
-      { urls: ["https://*/*", "http://*/*"] },
-      (details: any, callback: any) => {
-        console.log("in callback");
-        callback({
-          responseHeaders: {
-            ...details.responseHeaders,
-            "x-frame-options": [""],
-            "access-control-allow-origin": ["*"],
-          },
-        });
-      }
-    );
-
-    this.addStatusBarItem().setText("Status Bar Text");
-
     this.addCommand({
       id: "pluck-insert-from-url",
       name: "Insert contents from URL",
@@ -41,32 +23,60 @@ export default class Pluck extends Plugin {
   }
 
   async processURL(url: string) {
-    const response = await fetch(url, {
-      headers: {
-        Accept: "text/plain",
-      },
-    });
-    const res = await response.text();
-    if (!res) {
-      console.error(`[Pluck] No text/plain response from URL: ${url}`);
-      return;
-    }
-    const turndownService = new TurndownService();
-    const md = turndownService.turndown(res);
-    if (!md) {
-      console.error(`[Pluck] Unable to convert text to Markdown.`);
-      return;
-    }
-
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const activeView = this.getActiveView();
     if (!activeView) {
       console.error("[Pluck] No active view to insert into.");
       return;
     }
 
-    const editor = activeView.editor;
-    const doc = editor.getDoc();
-    doc.replaceSelection(md);
+    var body = "";
+    const request = electron.remote.net.request({
+      url,
+    });
+    request.setHeader("Accept", "text/plain");
+    request.on("response", (response: any) => {
+      response.on("end", () => {
+        if (body && body.length > 0) {
+          this.noteFromHTML(body);
+        } else {
+          console.error(`[Pluck] Unable to fetch HTML from ${url}`);
+        }
+      });
+      response.on("error", () => {
+        console.error(`[Pluck] Error fetching HTML ${url}`);
+      });
+      response.on("data", (chunk: any) => {
+        body += chunk;
+      });
+    });
+    request.end();
+  }
+
+  async noteFromHTML(html: string) {
+    const turndownService = new TurndownService();
+    let md;
+    if (htmlToMarkdown) {
+      md = htmlToMarkdown(html);
+    } else {
+      md = turndownService.turndown(html);
+    }
+
+    if (!md) {
+      console.error(`[Pluck] Unable to convert text to Markdown.`);
+      return;
+    }
+
+    const activeView = this.getActiveView();
+    if (!activeView) {
+      console.error("[Pluck] No active view to insert into.");
+      return;
+    }
+
+    activeView.editor.replaceSelection(md);
+  }
+
+  getActiveView(): MarkdownView {
+    return this.app.workspace.getActiveViewOfType(MarkdownView);
   }
 }
 
