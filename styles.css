@@ -1,1 +1,8 @@
-/* nothing here! */
+#pluck-input {
+  width: 80%;
+  margin-right: 8px;
+}
+
+#pluck-button {
+  font-weight: bold;
+}

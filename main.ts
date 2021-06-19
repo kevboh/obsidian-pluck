@@ -1,10 +1,11 @@
 import {
   App,
-  Plugin,
-  FuzzyMatch,
-  FuzzySuggestModal,
-  MarkdownView,
+  ButtonComponent,
   htmlToMarkdown,
+  MarkdownView,
+  Modal,
+  Plugin,
+  TextComponent,
 } from "obsidian";
 
 // @ts-ignore
@@ -80,7 +81,7 @@ export default class Pluck extends Plugin {
   }
 }
 
-class URLModal extends FuzzySuggestModal<string> {
+class URLModal extends Modal {
   plugin: Pluck;
 
   constructor(app: App, plugin: Pluck) {
@@ -88,27 +89,33 @@ class URLModal extends FuzzySuggestModal<string> {
     this.plugin = plugin;
   }
 
-  getSuggestions(query: string): FuzzyMatch<string>[] {
-    return [
-      {
-        item: query,
-        match: {
-          score: 0,
-          matches: [],
-        },
-      },
-    ];
+  onOpen() {
+    const { contentEl } = this;
+    const urlField = new TextComponent(contentEl).setPlaceholder(
+      "URL of note contents"
+    );
+    urlField.inputEl.id = "pluck-input";
+
+    const doPluck = () => {
+      const url = urlField.getValue();
+      this.plugin.processURL(url);
+      this.close();
+    };
+
+    const pluckButton = new ButtonComponent(contentEl)
+      .setButtonText("Pluck")
+      .onClick(doPluck);
+    pluckButton.buttonEl.id = "pluck-button";
+    urlField.inputEl.focus();
+    urlField.inputEl.addEventListener("keypress", function (keypressed) {
+      if (keypressed.key === "Enter") {
+        doPluck();
+      }
+    });
   }
 
-  getItems(): string[] {
-    return [];
-  }
-
-  getItemText(item: string): string {
-    return `Insert HTML -> Markdown from: ${item}`;
-  }
-
-  onChooseItem(item: string, evt: MouseEvent | KeyboardEvent): void {
-    this.plugin.processURL(item);
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 }
